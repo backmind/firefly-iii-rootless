@@ -47,6 +47,8 @@ services:
       - DB_PASSWORD=firefly
       - APP_KEY=CHANGEME_32_CHARS
       - APP_URL=http://localhost:8080
+      - S6_KEEP_ENV=1
+      - S6_BEHAVIOUR_IF_STAGE2_FAILS=2
       # Rest of Firefly III environment variables
     depends_on:
       - db
@@ -72,30 +74,80 @@ docker run -d \
   -e DB_PASSWORD=firefly \
   -e APP_KEY=CHANGEME_32_CHARS \
   -e APP_URL=http://localhost:8080 \
+  -e S6_KEEP_ENV=1 \
+  -e S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
   backmind/firefly-iii-rootless:latest
 ```
 
+## UID/GID Considerations
+
+This image is built with `UID:GID` of `1000:1000`, which works for most standard Linux installations where the first non-root user has these IDs. If your user has different IDs, you have the following options:
+
+### Option 1: Adjust permissions on mounted volumes
+
+Before starting the container, prepare your host directories with appropriate permissions:
+
+```bash
+# Create the directory if it doesn't exist
+sudo mkdir -p /path/to/your/firefly_upload
+
+# Change ownership to match the container's UID:GID (1000:1000)
+sudo chown -R 1000:1000 /path/to/your/firefly_upload
+
+# Ensure proper permissions
+sudo chmod -R 775 /path/to/your/firefly_upload
+```
+
+For example, if your host user is `docker:docker` with UID:GID `1003:994` (as in the author's setup):
+
+```bash
+# You need to ensure the volume directory has ownership matching 
+# the container's expected 1000:1000, not your host user's 1003:994
+sudo mkdir -p /SERV-PROG/dockerFF/firefly3/firefly_iii_upload
+sudo chown -R 1000:1000 /SERV-PROG/dockerFF/firefly3/firefly_iii_upload
+sudo chmod -R 775 /SERV-PROG/dockerFF/firefly3/firefly_iii_upload
+```
+
+### Option 2: Build your own image with custom UID/GID
+
+If you prefer your container to use your specific UID:GID:
+
+```bash
+# Clone the repository
+git clone https://github.com/backmind/firefly-iii-rootless.git
+cd firefly-iii-rootless
+
+# Build with your custom UID/GID
+docker build -t firefly-iii-rootless-custom \
+  --build-arg PUID=$(id -u) \
+  --build-arg PGID=$(id -g) .
+
+# Use your custom image in docker-compose.yml
+# Replace: image: backmind/firefly-iii-rootless:latest
+# With: image: firefly-iii-rootless-custom
+```
+
+This approach requires rebuilding your image whenever the upstream Firefly III image updates, but gives you perfect UID/GID matching.
+
+### Why not use environment variables?
+
+Unfortunately, Docker's architecture doesn't allow modifying file ownership or user IDs after an image is built. The UID/GID must be set during the build process, which is why we use build arguments rather than runtime environment variables for this purpose.
+
 ## Docker Image Updates
 
-This image is based on the official [fireflyiii/core](https://hub.docker.com/r/fireflyiii/core) image and tagged to follow its versioning scheme. When a new version of the official image is released, this image will be rebuilt automatically.
+This image is based on the official [fireflyiii/core](https://hub.docker.com/r/fireflyiii/core) image and tagged to follow its versioning scheme. When a new version of the official image is released, this image will be rebuilt automatically through GitHub Actions.
 
 Tags:
 - `latest`: Always points to the most recent stable build
 - `x.y.z`: Version-specific builds matching the official Firefly III releases
 
-## Building Locally
-
-If you want to build this image locally:
-
-```bash
-git clone https://github.com/backmind/firefly-iii-rootless.git
-cd firefly-iii-rootless
-docker build -t firefly-iii-rootless .
-```
-
 ## Environment Variables
 
-This image supports all environment variables from the official Firefly III image, with no additional requirements. See the [official Firefly III documentation](https://docs.firefly-iii.org/firefly-iii/advanced-installation/docker/) for the complete list.
+This image supports all environment variables from the official Firefly III image. See the [official Firefly III documentation](https://docs.firefly-iii.org/firefly-iii/advanced-installation/docker/) for the complete list.
+
+Additionally, the following S6 variables are recommended:
+- `S6_KEEP_ENV=1`: Ensures environment variables are passed to all services
+- `S6_BEHAVIOUR_IF_STAGE2_FAILS=2`: Controls container behavior if a service fails
 
 ## Security Considerations
 

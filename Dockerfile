@@ -28,6 +28,3 @@ RUN usermod -u ${PUID} www-data && \
 
 # Copy initialization script (executable permissions set in GitHub Actions)
 COPY rootless-init.sh /etc/entrypoint.d/01-rootless-init.sh
-
-# Switch back to www-data user to run as non-root
-USER www-data
